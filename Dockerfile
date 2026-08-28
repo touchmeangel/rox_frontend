@@ -26,4 +26,4 @@ ENV PORT=8080
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s \
   CMD wget -qO- "http://127.0.0.1:${PORT}/" || exit 1
 
-ENTRYPOINT ["sh", "-c", "test -n \"$API_BASE_URL\" && sed \"s#__VITE_API_BASE_URL__#${API_BASE_URL}#g\" dist/config.js.template > dist/config.js && exec sirv-cli dist --single --etag --host 0.0.0.0 --port ${PORT}"]
+ENTRYPOINT ["sh", "-c", "test -n \"$API_BASE_URL\" && sed \"s#__VITE_API_BASE_URL__#${API_BASE_URL}#g\" dist/config.js.template > dist/config.js && exec sirv dist --single --etag --host 0.0.0.0 --port ${PORT}"]
