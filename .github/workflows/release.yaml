@@ -1,11 +1,11 @@
 name: Release
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+  pull_request:
 
 permissions:
-  contents: write
-  packages: write
+  contents: read
 
 jobs:
   docker:
