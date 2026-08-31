@@ -60,5 +60,5 @@ function decodeJwtPayload<T = Record<string, unknown>>(token: string): T | null 
 
 export const currentUser = derived(authStore, ($s) => {
   if (!$s.accessToken) return null;
-  return decodeJwtPayload<{ sub?: string; roles?: string[]; email?: string; exp?: number }>($s.accessToken);
+  return decodeJwtPayload<{ sub?: string; roles?: string[]; email?: string; username?: string; exp?: number }>($s.accessToken);
 });

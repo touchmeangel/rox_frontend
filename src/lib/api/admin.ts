@@ -1,9 +1,5 @@
 import { http } from '../http';
 
-export function openSignup(): Promise<void> {
-  return http.post<void>('api/admin/open_signup');
-}
-
-export function closeSignup(): Promise<void> {
-  return http.post<void>('api/admin/close_signup');
+export function setSignupMode(open: boolean): Promise<{ open: boolean }> {
+  return http.post<{ open: boolean }>('api/admin/signup_mode', { open });
 }

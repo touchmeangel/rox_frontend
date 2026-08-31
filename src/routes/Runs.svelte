@@ -8,20 +8,21 @@
   let runs: RunSummary[] = [];
   let nextCursor: string | undefined;
   let loading = false;
-  let error: string | null = null;
+  let loadError: string | null = null;
 
   let newRunName = '';
   let creating = false;
+  let actionError: string | null = null;
 
   async function load(reset = true): Promise<void> {
     loading = true;
-    error = null;
+    loadError = null;
     try {
       const res = await listRuns(20, reset ? undefined : nextCursor);
       runs = reset ? res.runs : [...runs, ...res.runs];
       nextCursor = res.next_cursor;
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Failed to load runs.';
+      loadError = err instanceof ApiError ? err.message : 'Failed to load runs.';
     } finally {
       loading = false;
     }
@@ -30,13 +31,13 @@
   async function handleCreate(): Promise<void> {
     if (!newRunName.trim()) return;
     creating = true;
-    error = null;
+    actionError = null;
     try {
       await createRun(newRunName.trim());
       newRunName = '';
       await load(true);
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Failed to create run.';
+      actionError = err instanceof ApiError ? err.message : 'Failed to create run.';
     } finally {
       creating = false;
     }
@@ -44,12 +45,12 @@
 
   async function handleDelete(runId: string): Promise<void> {
     if (!confirm('Delete this run? This cannot be undone.')) return;
-    error = null;
+    actionError = null;
     try {
       await deleteRun(runId);
       runs = runs.filter((r) => r.id !== runId);
     } catch (err) {
-      error = err instanceof ApiError ? err.message : 'Failed to delete run.';
+      actionError = err instanceof ApiError ? err.message : 'Failed to delete run.';
     }
   }
 
@@ -63,10 +64,12 @@
   <button type="submit" disabled={creating}>{creating ? 'Creating…' : 'Create run'}</button>
 </form>
 
-{#if error}<p class="error">{error}</p>{/if}
+{#if actionError}<p class="error">{actionError}</p>{/if}
 
 {#if loading && runs.length === 0}
   <p>Loading…</p>
+{:else if loadError}
+  <p class="error">{loadError}</p>
 {:else if runs.length === 0}
   <p>No runs yet.</p>
 {:else}

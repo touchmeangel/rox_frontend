@@ -41,8 +41,6 @@ async function parseErrorBody(res: Response): Promise<string> {
 
 let refreshPromise: Promise<void> | null = null;
 
-// Backend's /auth/refresh isn't in the code you shared — this assumes it takes
-// {"refresh_token": "..."} and returns the same shape as login/signup. Adjust if not.
 async function refreshAccessToken(): Promise<void> {
   const state = get(authStore);
   if (!state.refreshToken) {
@@ -54,8 +52,7 @@ async function refreshAccessToken(): Promise<void> {
     refreshPromise = (async () => {
       const res = await fetch(buildUrl('auth/refresh'), {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ refresh_token: state.refreshToken }),
+        headers: { Authorization: `Bearer ${state.refreshToken}` },
       });
       if (!res.ok) {
         clearAuth();

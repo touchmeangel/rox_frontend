@@ -1,4 +1,4 @@
-import { writable, derived } from 'svelte/store';
+import { writable, derived, get } from 'svelte/store';
 import { getStatus } from '../api/auth';
 
 export type SignupMode = 'bootstrap' | 'open' | 'invite_only';
@@ -14,7 +14,9 @@ export const statusStore = writable<StatusState>({ mode: null, loading: false, e
 let inflight: Promise<void> | null = null;
 
 export function loadStatus(): Promise<void> {
+  if (get(statusStore).mode !== null) return Promise.resolve();
   if (inflight) return inflight;
+
   statusStore.update((s) => ({ ...s, loading: true, error: null }));
   inflight = getStatus()
     .then((res) => statusStore.set({ mode: res.mode as SignupMode, loading: false, error: null }))

@@ -7,10 +7,10 @@
   import Signup from './routes/Signup.svelte';
   import Runs from './routes/Runs.svelte';
   import RunDetail from './routes/RunDetail.svelte';
-  import Admin from './routes/Admin.svelte';
+  import Settings from './routes/Settings.svelte';
   import NotFound from './routes/NotFound.svelte';
 
-  const protectedRoutes = new Set(['runs', 'run-detail', 'admin']);
+  const protectedRoutes = new Set(['runs', 'run-detail', 'settings']);
 
   onMount(() => loadStatus());
 
@@ -27,11 +27,9 @@
 <header>
   <nav>
     <a href="/runs" on:click|preventDefault={() => navigate('/runs')}>Runs</a>
-    {#if $currentUser?.roles?.includes('admin')}
-      <a href="/admin" on:click|preventDefault={() => navigate('/admin')}>Admin</a>
-    {/if}
     <span class="spacer"></span>
     {#if $isAuthenticated}
+      <a href="/settings" on:click|preventDefault={() => navigate('/settings')}>Settings</a>
       <span>{$currentUser?.email ?? ''}</span>
       <button on:click={logout}>Log out</button>
     {:else}
@@ -50,7 +48,7 @@
   {:else if $route.name === 'signup'}<Signup />
   {:else if $route.name === 'runs'}<Runs />
   {:else if $route.name === 'run-detail'}<RunDetail runId={$route.runId} />
-  {:else if $route.name === 'admin'}<Admin />
+  {:else if $route.name === 'settings'}<Settings />
   {:else}<NotFound />
   {/if}
 </main>
