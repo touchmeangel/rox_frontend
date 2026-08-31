@@ -30,7 +30,6 @@ authStore.subscribe((state) => {
       localStorage.removeItem(STORAGE_KEY);
     }
   } catch {
-    // localStorage unavailable (private browsing etc.) — auth just won't persist across reloads.
   }
 });
 
@@ -59,9 +58,7 @@ function decodeJwtPayload<T = Record<string, unknown>>(token: string): T | null 
   }
 }
 
-// Best-effort client-side read of JWT claims for UI purposes only (e.g. showing/hiding
-// the Admin link). The server is the actual source of truth for authorization.
 export const currentUser = derived(authStore, ($s) => {
   if (!$s.accessToken) return null;
-  return decodeJwtPayload<{ sub?: string; role?: string; email?: string; exp?: number }>($s.accessToken);
+  return decodeJwtPayload<{ sub?: string; roles?: string[]; email?: string; exp?: number }>($s.accessToken);
 });
