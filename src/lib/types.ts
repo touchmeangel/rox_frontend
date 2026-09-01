@@ -21,6 +21,7 @@ export interface StatusResponse {
 
 export interface RunSummary {
   id: string;
+  name: string;
   status: string;
   workspace_folder: string;
   created_at: string;

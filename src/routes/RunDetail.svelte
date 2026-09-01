@@ -5,8 +5,7 @@
   import { ApiError } from '../lib/http';
 
   export let runId: string;
-
-  let runName = runId;
+  let runName = '';
 
   let currentPath = '';
   let entries: FileEntry[] = [];
@@ -57,10 +56,7 @@
   }
 
   onMount(() => {
-    const storedName = sessionStorage.getItem(`run_name_${runId}`);
-    if (storedName) {
-      runName = storedName;
-    }
+    runName = sessionStorage.getItem(`run_name_${runId}`) || runId;
     loadFiles('', true);
   });
 </script>
@@ -87,7 +83,7 @@
   {#if loadingFiles && entries.length === 0}
     <p>Loading files…</p>
   {:else if entries.length === 0}
-    <p class="empty-state">No files uploaded for this run.</p>
+    <p class="empty-state">No files found.</p>
   {:else}
     <ul class="file-list">
       {#each entries as entry (entry.name)}

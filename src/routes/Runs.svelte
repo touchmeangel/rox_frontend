@@ -17,10 +17,6 @@
   let creating = false;
   let modalError: string | null = null;
 
-  function getRunName(run: any): string {
-    return run.name || run.workspace_folder || run.id;
-  }
-
   async function load(reset = true): Promise<void> {
     loading = true;
     loadError = null;
@@ -40,15 +36,17 @@
   }
 
   async function handleCreateAndUpload(): Promise<void> {
-    if (!newRunName.trim()) return;
+    if (!newRunName.trim() || !selectedFile) return;
+    
     creating = true;
     modalError = null;
+    let createdRunId: string | null = null;
     
     try {
       const res = await createRun(newRunName.trim());
-      const createdRunId = (res as any).id || (res as any).run_id;
+      createdRunId = (res as any).id || (res as any).run_id;
 
-      if (selectedFile && createdRunId) {
+      if (createdRunId) {
         await uploadRunWorkspace(createdRunId, selectedFile);
       }
 
@@ -58,6 +56,14 @@
       await load(true);
     } catch (err) {
       modalError = err instanceof ApiError ? err.message : 'Failed to create run or upload workspace.';
+      
+      if (createdRunId) {
+        try {
+          await deleteRun(createdRunId);
+        } catch (cleanupErr) {
+          console.error('Failed to cleanup empty run after upload failed', cleanupErr);
+        }
+      }
     } finally {
       creating = false;
     }
@@ -74,8 +80,8 @@
     }
   }
 
-  function goToRun(run: any): void {
-    sessionStorage.setItem(`run_name_${run.id}`, getRunName(run));
+  function goToRun(run: RunSummary): void {
+    sessionStorage.setItem(`run_name_${run.id}`, run.name);
     navigate(`/runs/${run.id}`);
   }
 
@@ -99,15 +105,17 @@
           <input id="runName" placeholder="My new run" bind:value={newRunName} required />
         </div>
         <div class="form-group">
-          <label for="workspaceFile">Workspace (.zip) <em>(Optional)</em></label>
-          <input id="workspaceFile" type="file" accept=".zip" on:change={handleFileSelect} />
+          <label for="workspaceFile">Workspace (.zip)</label>
+          <input id="workspaceFile" type="file" accept=".zip" required on:change={handleFileSelect} />
         </div>
         
         {#if modalError}<p class="error">{modalError}</p>{/if}
         
         <div class="modal-actions">
           <button type="button" class="cancel-btn" on:click={() => showCreateModal = false} disabled={creating}>Cancel</button>
-          <button type="submit" disabled={creating}>{creating ? 'Saving…' : 'Create & Upload'}</button>
+          <button type="submit" disabled={creating || !newRunName.trim() || !selectedFile}>
+            {creating ? 'Saving…' : 'Create & Upload'}
+          </button>
         </div>
       </form>
     </div>
@@ -130,7 +138,7 @@
         <tr>
           <td>
             <a href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run)}>
-              {getRunName(run)}
+              {run.name}
             </a>
           </td>
           <td>{run.status}</td>
