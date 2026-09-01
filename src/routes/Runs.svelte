@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listRuns, createRun, deleteRun, uploadRunWorkspace } from '../lib/api/agent';
+  import { listRuns, createRun, deleteRun, uploadRunWorkspace, startRun } from '../lib/api/agent';
   import type { RunSummary } from '../lib/types';
   import { ApiError } from '../lib/http';
   import { navigate } from '../lib/router';
@@ -35,34 +35,45 @@
     selectedFile = (e.target as HTMLInputElement).files?.[0] ?? null;
   }
 
-  async function handleCreateAndUpload(): Promise<void> {
-    if (!newRunName.trim() || !selectedFile) return;
-    
+  function goToRun(id: string, name: string): void {
+    sessionStorage.setItem(`run_name_${id}`, name);
+    navigate(`/runs/${id}`);
+  }
+
+  function resetModal(): void {
+    showCreateModal = false;
+    newRunName = '';
+    selectedFile = null;
+  }
+
+  async function handleCreate(): Promise<void> {
+    const name = newRunName.trim();
+    if (!name) return;
+
     creating = true;
     modalError = null;
-    let createdRunId: string | null = null;
-    
-    try {
-      const res = await createRun(newRunName.trim());
-      createdRunId = (res as any).id || (res as any).run_id;
+    let runId: string | null = null;
 
-      if (createdRunId) {
-        await uploadRunWorkspace(createdRunId, selectedFile);
+    try {
+      const created = await createRun(name);
+      runId = created.run_id;
+
+      if (selectedFile) {
+        await uploadRunWorkspace(runId, selectedFile);
+        await startRun(runId);
       }
 
-      newRunName = '';
-      selectedFile = null;
-      showCreateModal = false;
-      await load(true);
+      resetModal();
+      goToRun(runId, name);
     } catch (err) {
-      modalError = err instanceof ApiError ? err.message : 'Failed to create run or upload workspace.';
-      
-      if (createdRunId) {
-        try {
-          await deleteRun(createdRunId);
-        } catch (cleanupErr) {
-          console.error('Failed to cleanup empty run after upload failed', cleanupErr);
-        }
+      if (runId) {
+        // Run exists (and possibly has files) even though a later step
+        // failed — don't delete it. Send the user to its own page, where
+        // upload/start can be retried, instead of losing that state.
+        resetModal();
+        goToRun(runId, name);
+      } else {
+        modalError = err instanceof ApiError ? err.message : 'Failed to create run.';
       }
     } finally {
       creating = false;
@@ -80,11 +91,6 @@
     }
   }
 
-  function goToRun(run: RunSummary): void {
-    sessionStorage.setItem(`run_name_${run.id}`, run.name);
-    navigate(`/runs/${run.id}`);
-  }
-
   onMount(() => load(true));
 </script>
 
@@ -98,23 +104,24 @@
 {#if showCreateModal}
   <div class="modal-overlay">
     <div class="modal">
-      <h2>Create & Upload Run</h2>
-      <form on:submit|preventDefault={handleCreateAndUpload}>
+      <h2>Create Run</h2>
+      <form on:submit|preventDefault={handleCreate}>
         <div class="form-group">
           <label for="runName">Run Name</label>
           <input id="runName" placeholder="My new run" bind:value={newRunName} required />
         </div>
         <div class="form-group">
-          <label for="workspaceFile">Workspace (.zip)</label>
-          <input id="workspaceFile" type="file" accept=".zip" required on:change={handleFileSelect} />
+          <label for="workspaceFile">Workspace (.zip) — optional</label>
+          <input id="workspaceFile" type="file" accept=".zip" on:change={handleFileSelect} />
+          <p class="hint">You can also upload and start this run later from its page.</p>
         </div>
-        
+
         {#if modalError}<p class="error">{modalError}</p>{/if}
-        
+
         <div class="modal-actions">
-          <button type="button" class="cancel-btn" on:click={() => showCreateModal = false} disabled={creating}>Cancel</button>
-          <button type="submit" disabled={creating || !newRunName.trim() || !selectedFile}>
-            {creating ? 'Saving…' : 'Create & Upload'}
+          <button type="button" class="cancel-btn" on:click={resetModal} disabled={creating}>Cancel</button>
+          <button type="submit" disabled={creating || !newRunName.trim()}>
+            {creating ? 'Saving…' : selectedFile ? 'Create, Upload & Start' : 'Create'}
           </button>
         </div>
       </form>
@@ -137,7 +144,7 @@
       {#each runs as run (run.id)}
         <tr>
           <td>
-            <a href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run)}>
+            <a href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run.id, run.name)}>
               {run.name}
             </a>
           </td>
@@ -157,8 +164,9 @@
   .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
   table { width: 100%; border-collapse: collapse; }
   th, td { text-align: left; padding: 0.6rem 0.4rem; border-bottom: 1px solid #ddd; }
-  
+
   .error { color: #b00020; margin: 0.5rem 0; }
+  .hint { color: #666; font-size: 0.85em; margin: 0.25rem 0 0; }
   .delete-btn { color: #b00020; background: none; border: 1px solid #b00020; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; }
   .delete-btn:hover { background: #ffebee; }
 
