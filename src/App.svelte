@@ -30,7 +30,7 @@
     <span class="spacer"></span>
     {#if $isAuthenticated}
       <a href="/settings" on:click|preventDefault={() => navigate('/settings')}>Settings</a>
-      <span>{$currentUser?.email ?? ''}</span>
+      <span>{$currentUser?.username ?? ''}</span>
       <button on:click={logout}>Log out</button>
     {:else}
       {#if $canLogin}
