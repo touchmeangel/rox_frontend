@@ -1,21 +1,18 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { uploadRunWorkspace, startRun, listRunFiles } from '../lib/api/agent';
+  import { startRun, listRunFiles } from '../lib/api/agent';
   import type { FileEntry } from '../lib/types';
   import { ApiError } from '../lib/http';
 
   export let runId: string;
+
+  let runName = runId;
 
   let currentPath = '';
   let entries: FileEntry[] = [];
   let nextCursor: string | undefined;
   let loadingFiles = false;
   let filesError: string | null = null;
-
-  let selectedFile: File | null = null;
-  let uploading = false;
-  let uploadError: string | null = null;
-  let uploadedBytes: number | null = null;
 
   let starting = false;
   let startError: string | null = null;
@@ -46,25 +43,6 @@
     void loadFiles(parts.join('/'), true);
   }
 
-  function handleFileSelect(e: Event): void {
-    selectedFile = (e.target as HTMLInputElement).files?.[0] ?? null;
-  }
-
-  async function handleUpload(): Promise<void> {
-    if (!selectedFile) return;
-    uploading = true;
-    uploadError = null;
-    try {
-      const res = await uploadRunWorkspace(runId, selectedFile);
-      uploadedBytes = res.uploaded_bytes;
-      await loadFiles('', true);
-    } catch (err) {
-      uploadError = err instanceof ApiError ? err.message : 'Upload failed.';
-    } finally {
-      uploading = false;
-    }
-  }
-
   async function handleStart(): Promise<void> {
     starting = true;
     startError = null;
@@ -78,44 +56,47 @@
     }
   }
 
-  onMount(() => loadFiles('', true));
+  onMount(() => {
+    const storedName = sessionStorage.getItem(`run_name_${runId}`);
+    if (storedName) {
+      runName = storedName;
+    }
+    loadFiles('', true);
+  });
 </script>
 
-<h1>Run: {runId}</h1>
+<header class="detail-header">
+  <div>
+    <h1>Run: {runName}</h1>
+    {#if runStatus}<p class="status-badge">Status: {runStatus}</p>{/if}
+  </div>
+  <div class="actions">
+    <button class="start-btn" on:click={handleStart} disabled={starting}>
+      {starting ? 'Starting…' : '▶ Start Run'}
+    </button>
+  </div>
+</header>
 
-<section>
-  <h2>Upload workspace (.zip)</h2>
-  <input type="file" accept=".zip" on:change={handleFileSelect} />
-  <button on:click={handleUpload} disabled={!selectedFile || uploading}>
-    {uploading ? 'Uploading…' : 'Upload'}
-  </button>
-  {#if uploadError}<p class="error">{uploadError}</p>{/if}
-  {#if uploadedBytes !== null}<p>Uploaded {uploadedBytes} bytes.</p>{/if}
-</section>
+{#if startError}<p class="error">{startError}</p>{/if}
 
-<section>
-  <h2>Start run</h2>
-  <button on:click={handleStart} disabled={starting}>{starting ? 'Starting…' : 'Start'}</button>
-  {#if startError}<p class="error">{startError}</p>{/if}
-  {#if runStatus}<p>Status: {runStatus}</p>{/if}
-</section>
-
-<section>
-  <h2>Files {currentPath ? `— /${currentPath}` : ''}</h2>
-  {#if currentPath}<button on:click={goUp}>.. (up)</button>{/if}
+<section class="files-section">
+  <h2>Workspace Files {currentPath ? `— /${currentPath}` : ''}</h2>
+  {#if currentPath}<button class="up-btn" on:click={goUp}>↖ Back (Up)</button>{/if}
   {#if filesError}<p class="error">{filesError}</p>{/if}
+  
   {#if loadingFiles && entries.length === 0}
-    <p>Loading…</p>
+    <p>Loading files…</p>
   {:else if entries.length === 0}
-    <p>No files.</p>
+    <p class="empty-state">No files uploaded for this run.</p>
   {:else}
-    <ul>
+    <ul class="file-list">
       {#each entries as entry (entry.name)}
         <li>
           {#if entry.is_folder}
-            <button on:click={() => openFolder(entry.name)}>📁 {entry.name}</button>
+            <button class="link-btn" on:click={() => openFolder(entry.name)}>📁 {entry.name}</button>
           {:else}
-            📄 {entry.name} {#if entry.size}({entry.size} bytes){/if}
+            <span class="file-icon">📄</span> {entry.name} 
+            <span class="size">{#if entry.size}({entry.size} bytes){/if}</span>
           {/if}
         </li>
       {/each}
@@ -127,7 +108,29 @@
 </section>
 
 <style>
-  section { margin-bottom: 1.5rem; }
+  .detail-header { 
+    display: flex; justify-content: space-between; align-items: flex-start; 
+    margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem; 
+  }
+  .detail-header h1 { margin: 0 0 0.5rem 0; }
+  .files-section { margin-top: 1.5rem; }
   .error { color: #b00020; }
-  ul { list-style: none; padding: 0; }
+  
+  .status-badge { display: inline-block; margin: 0; padding: 0.25rem 0.75rem; background: #e3f2fd; color: #1565c0; border-radius: 4px; font-weight: 500; font-size: 0.9rem;}
+  
+  .start-btn { font-size: 1.05rem; padding: 0.6rem 1.2rem; background-color: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;}
+  .start-btn:hover { background-color: #1b5e20; }
+  .start-btn:disabled { background-color: #a5d6a7; cursor: not-allowed; }
+
+  .file-list { list-style: none; padding: 0; margin: 1rem 0; border: 1px solid #e0e0e0; border-radius: 6px; }
+  .file-list li { padding: 0.75rem 1rem; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 0.5rem; }
+  .file-list li:last-child { border-bottom: none; }
+  
+  .link-btn { background: none; border: none; padding: 0; color: #1565c0; font: inherit; cursor: pointer; text-align: left; font-weight: 500; }
+  .link-btn:hover { text-decoration: underline; }
+  .up-btn { margin-bottom: 1rem; padding: 0.4rem 0.8rem; background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;}
+  
+  .file-icon { color: #757575; }
+  .size { color: #999; font-size: 0.85em; margin-left: auto; }
+  .empty-state { color: #666; font-style: italic; background: #f9f9f9; padding: 2rem; border-radius: 6px; text-align: center; }
 </style>
