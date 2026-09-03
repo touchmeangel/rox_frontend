@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { startRun, listRunFiles, uploadRunWorkspace } from '../lib/api/agent';
+  import { startRun, listRunFiles, uploadRunWorkspaceChunked } from '../lib/api/agent';
   import type { FileEntry } from '../lib/types';
   import { ApiError } from '../lib/http';
 
@@ -20,6 +20,7 @@
   let selectedFile: File | null = null;
   let uploading = false;
   let uploadError: string | null = null;
+  let uploadProgress = 0;
 
   async function loadFiles(path: string, reset = true): Promise<void> {
     loadingFiles = true;
@@ -67,8 +68,11 @@
     if (!selectedFile) return;
     uploading = true;
     uploadError = null;
+    uploadProgress = 0;
     try {
-      await uploadRunWorkspace(runId, selectedFile);
+      await uploadRunWorkspaceChunked(runId, selectedFile, (fraction) => {
+        uploadProgress = fraction;
+      });
       selectedFile = null;
       await loadFiles('', true);
       await handleStart();
@@ -105,9 +109,14 @@
   <div class="upload-row">
     <input type="file" accept=".zip" on:change={handleFileSelect} disabled={uploading} />
     <button on:click={handleUpload} disabled={!selectedFile || uploading}>
-      {uploading ? 'Uploading…' : 'Upload & Start'}
+      {uploading ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Upload & Start'}
     </button>
   </div>
+  {#if uploading}
+    <div class="progress-bar" role="progressbar" aria-valuenow={Math.round(uploadProgress * 100)} aria-valuemin="0" aria-valuemax="100">
+      <div class="progress-fill" style="width: {Math.round(uploadProgress * 100)}%"></div>
+    </div>
+  {/if}
   {#if uploadError}<p class="error">{uploadError}</p>{/if}
 </section>
 
@@ -156,6 +165,9 @@
   .start-btn:disabled { background-color: #a5d6a7; cursor: not-allowed; }
 
   .upload-row { display: flex; gap: 0.75rem; align-items: center; }
+
+  .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 0.75rem; max-width: 320px; }
+  .progress-fill { height: 100%; background: #2e7d32; transition: width 0.15s ease; }
 
   .file-list { list-style: none; padding: 0; margin: 1rem 0; border: 1px solid #e0e0e0; border-radius: 6px; }
   .file-list li { padding: 0.75rem 1rem; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 0.5rem; }

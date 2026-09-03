@@ -4,7 +4,6 @@ import type {
   CreateRunResponse,
   DeleteRunResponse,
   StartRunResponse,
-  UploadRunResponse,
   ListRunFilesResponse,
 } from '../types';
 
@@ -24,12 +23,6 @@ export function startRun(runId: string): Promise<StartRunResponse> {
   return http.post<StartRunResponse>(`api/agent/runs/${encodeURIComponent(runId)}/start`);
 }
 
-export function uploadRunWorkspace(runId: string, file: File): Promise<UploadRunResponse> {
-  const form = new FormData();
-  form.append('workspace', file);
-  return http.postForm<UploadRunResponse>(`api/agent/runs/${encodeURIComponent(runId)}/upload`, form);
-}
-
 export function listRunFiles(
   runId: string,
   path = '',
@@ -40,3 +33,5 @@ export function listRunFiles(
     query: { path, limit, cursor },
   });
 }
+
+export { uploadRunWorkspaceChunked } from './chunkedUpload';

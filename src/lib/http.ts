@@ -20,7 +20,7 @@ interface RequestOptions {
   query?: Record<string, string | number | undefined>;
 }
 
-function buildUrl(path: string, query?: RequestOptions['query']): string {
+export function buildUrl(path: string, query?: RequestOptions['query']): string {
   const url = new URL(path.replace(/^\//, ''), config.apiBaseUrl);
   if (query) {
     for (const [k, v] of Object.entries(query)) {
@@ -41,7 +41,7 @@ async function parseErrorBody(res: Response): Promise<string> {
 
 let refreshPromise: Promise<void> | null = null;
 
-async function refreshAccessToken(): Promise<void> {
+export async function refreshAccessToken(): Promise<void> {
   const state = get(authStore);
   if (!state.refreshToken) {
     clearAuth();

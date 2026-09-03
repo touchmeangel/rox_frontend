@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { listRuns, createRun, deleteRun, uploadRunWorkspace, startRun } from '../lib/api/agent';
+  import { listRuns, createRun, deleteRun, startRun, uploadRunWorkspaceChunked } from '../lib/api/agent';
   import type { RunSummary } from '../lib/types';
   import { ApiError } from '../lib/http';
   import { navigate } from '../lib/router';
@@ -16,6 +16,7 @@
   let selectedFile: File | null = null;
   let creating = false;
   let modalError: string | null = null;
+  let uploadProgress = 0;
 
   async function load(reset = true): Promise<void> {
     loading = true;
@@ -44,6 +45,7 @@
     showCreateModal = false;
     newRunName = '';
     selectedFile = null;
+    uploadProgress = 0;
   }
 
   async function handleCreate(): Promise<void> {
@@ -52,6 +54,7 @@
 
     creating = true;
     modalError = null;
+    uploadProgress = 0;
     let runId: string | null = null;
 
     try {
@@ -59,7 +62,9 @@
       runId = created.run_id;
 
       if (selectedFile) {
-        await uploadRunWorkspace(runId, selectedFile);
+        await uploadRunWorkspaceChunked(runId, selectedFile, (fraction) => {
+          uploadProgress = fraction;
+        });
         await startRun(runId);
       }
 
@@ -67,9 +72,6 @@
       goToRun(runId, name);
     } catch (err) {
       if (runId) {
-        // Run exists (and possibly has files) even though a later step
-        // failed — don't delete it. Send the user to its own page, where
-        // upload/start can be retried, instead of losing that state.
         resetModal();
         goToRun(runId, name);
       } else {
@@ -108,20 +110,27 @@
       <form on:submit|preventDefault={handleCreate}>
         <div class="form-group">
           <label for="runName">Run Name</label>
-          <input id="runName" placeholder="My new run" bind:value={newRunName} required />
+          <input id="runName" placeholder="My new run" bind:value={newRunName} required disabled={creating} />
         </div>
         <div class="form-group">
           <label for="workspaceFile">Workspace (.zip) — optional</label>
-          <input id="workspaceFile" type="file" accept=".zip" on:change={handleFileSelect} />
+          <input id="workspaceFile" type="file" accept=".zip" on:change={handleFileSelect} disabled={creating} />
           <p class="hint">You can also upload and start this run later from its page.</p>
         </div>
+
+        {#if creating && selectedFile}
+          <div class="progress-bar" role="progressbar" aria-valuenow={Math.round(uploadProgress * 100)} aria-valuemin="0" aria-valuemax="100">
+            <div class="progress-fill" style="width: {Math.round(uploadProgress * 100)}%"></div>
+          </div>
+          <p class="progress-label">{Math.round(uploadProgress * 100)}%</p>
+        {/if}
 
         {#if modalError}<p class="error">{modalError}</p>{/if}
 
         <div class="modal-actions">
           <button type="button" class="cancel-btn" on:click={resetModal} disabled={creating}>Cancel</button>
           <button type="submit" disabled={creating || !newRunName.trim()}>
-            {creating ? 'Saving…' : selectedFile ? 'Create, Upload & Start' : 'Create'}
+            {creating ? (selectedFile ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Saving…') : selectedFile ? 'Create, Upload & Start' : 'Create'}
           </button>
         </div>
       </form>
@@ -188,4 +197,8 @@
   .modal-actions { margin-top: 2rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
   .cancel-btn { background: #f5f5f5; color: #333; border: 1px solid #ccc; }
   .cancel-btn:hover { background: #e0e0e0; }
+
+  .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
+  .progress-fill { height: 100%; background: #1565c0; transition: width 0.15s ease; }
+  .progress-label { font-size: 0.8rem; color: #666; margin: 0.25rem 0 0; text-align: right; }
 </style>
