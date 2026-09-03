@@ -118,7 +118,7 @@ export async function uploadRunWorkspaceChunked(
   const tailStart = offset;
   const result = await xhrRequest<UploadRunResponse>(
     `api/agent/runs/${encodeURIComponent(runId)}/upload/finish`,
-    { offset },
+    {},
     tail,
     { onProgress: (loaded) => onProgress?.((tailStart + loaded) / file.size) } // no resyncOn409 — finish's 409 is a real error, not resumable
   );
