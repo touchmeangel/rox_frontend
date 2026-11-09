@@ -3,6 +3,9 @@
   import { startRun, listRunFiles, uploadRunWorkspaceChunked } from '../lib/api/agent';
   import type { FileEntry } from '../lib/types';
   import { ApiError } from '../lib/http';
+  import { navigate } from '../lib/router';
+  import DropZone from '../lib/DropZone.svelte';
+  import { statusTone, formatBytes } from '../lib/ui';
 
   export let runId: string;
   let runName = '';
@@ -21,6 +24,8 @@
   let uploading = false;
   let uploadError: string | null = null;
   let uploadProgress = 0;
+
+  $: crumbs = currentPath.split('/').filter(Boolean);
 
   async function loadFiles(path: string, reset = true): Promise<void> {
     loadingFiles = true;
@@ -41,14 +46,8 @@
     void loadFiles(currentPath ? `${currentPath}/${name}` : name, true);
   }
 
-  function goUp(): void {
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    void loadFiles(parts.join('/'), true);
-  }
-
-  function handleFileSelect(e: Event): void {
-    selectedFile = (e.target as HTMLInputElement).files?.[0] ?? null;
+  function openCrumb(i: number): void {
+    void loadFiles(crumbs.slice(0, i + 1).join('/'), true);
   }
 
   async function handleStart(): Promise<void> {
@@ -89,95 +88,82 @@
   });
 </script>
 
-<header class="detail-header">
-  <div>
-    <h1>Run: {runName}</h1>
-    {#if runStatus}<p class="status-badge">Status: {runStatus}</p>{/if}
-  </div>
-  <div class="actions">
-    <button class="start-btn" on:click={handleStart} disabled={starting}>
-      {starting ? 'Starting…' : '▶ Start Run'}
-    </button>
-  </div>
-</header>
+<section class="wrap page">
+  <a class="back muted" href="/runs" on:click|preventDefault={() => navigate('/runs')}>← Runs</a>
 
-{#if startError}<p class="error">{startError}</p>{/if}
-
-<section class="upload-section">
-  <h2>Upload Workspace</h2>
-  <p class="hint">Upload a .zip to set up this run's files — it starts automatically once the upload finishes.</p>
-  <div class="upload-row">
-    <input type="file" accept=".zip" on:change={handleFileSelect} disabled={uploading} />
-    <button on:click={handleUpload} disabled={!selectedFile || uploading}>
-      {uploading ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Upload & Start'}
-    </button>
-  </div>
-  {#if uploading}
-    <div class="progress-bar" role="progressbar" aria-valuenow={Math.round(uploadProgress * 100)} aria-valuemin="0" aria-valuemax="100">
-      <div class="progress-fill" style="width: {Math.round(uploadProgress * 100)}%"></div>
+  <header class="head">
+    <div class="stack" style="gap: 0.75rem">
+      <h1 class="title">{runName}</h1>
+      {#if runStatus}<span class="pill"><i class="dot {statusTone(runStatus)}"></i>{runStatus}</span>{/if}
     </div>
-  {/if}
-  {#if uploadError}<p class="error">{uploadError}</p>{/if}
-</section>
+    <button class="primary" on:click={handleStart} disabled={starting}>{starting ? 'Starting…' : 'Start run'}</button>
+  </header>
 
-<section class="files-section">
-  <h2>Workspace Files {currentPath ? `— /${currentPath}` : ''}</h2>
-  {#if currentPath}<button class="up-btn" on:click={goUp}>↖ Back (Up)</button>{/if}
-  {#if filesError}<p class="error">{filesError}</p>{/if}
+  {#if startError}<p class="err">{startError}</p>{/if}
 
-  {#if loadingFiles && entries.length === 0}
-    <p>Loading files…</p>
-  {:else if entries.length === 0}
-    <p class="empty-state">No files found.</p>
-  {:else}
-    <ul class="file-list">
-      {#each entries as entry (entry.name)}
-        <li>
-          {#if entry.is_folder}
-            <button class="link-btn" on:click={() => openFolder(entry.name)}>📁 {entry.name}</button>
-          {:else}
-            <span class="file-icon">📄</span> {entry.name}
-            <span class="size">{#if entry.size}({entry.size} bytes){/if}</span>
-          {/if}
-        </li>
+  <div class="block stack">
+    <h2>Workspace</h2>
+    <p class="muted">Upload a .zip to set up this run's files. The run starts automatically once the upload finishes.</p>
+    <DropZone bind:file={selectedFile} disabled={uploading} progress={uploading ? uploadProgress : null} />
+    <div>
+      <button class="primary" on:click={handleUpload} disabled={!selectedFile || uploading}>
+        {uploading ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Upload & start'}
+      </button>
+    </div>
+    {#if uploadError}<p class="err">{uploadError}</p>{/if}
+  </div>
+
+  <div class="block stack">
+    <h2>Files</h2>
+    <div class="crumbs">
+      <button class="ghost" on:click={() => loadFiles('', true)}>root</button>
+      {#each crumbs as c, i}
+        <span class="sep">/</span>
+        <button class="ghost" on:click={() => openCrumb(i)}>{c}</button>
       {/each}
-    </ul>
-    {#if nextCursor}
-      <button on:click={() => loadFiles(currentPath, false)} disabled={loadingFiles}>Load more</button>
+    </div>
+
+    {#if filesError}<p class="err">{filesError}</p>{/if}
+
+    {#if loadingFiles && entries.length === 0}
+      <p class="muted">Loading files…</p>
+    {:else if entries.length === 0}
+      <div class="card empty muted">No files yet. Upload a workspace above.</div>
+    {:else}
+      <ul class="card files">
+        {#each entries as entry (entry.name)}
+          <li>
+            {#if entry.is_folder}
+              <button class="folder" on:click={() => openFolder(entry.name)}><span class="ico">▸</span>{entry.name}</button>
+            {:else}
+              <span class="file"><span class="ico"></span>{entry.name}</span>
+              {#if entry.size}<span class="size">{formatBytes(entry.size)}</span>{/if}
+            {/if}
+          </li>
+        {/each}
+      </ul>
+      {#if nextCursor}
+        <div><button on:click={() => loadFiles(currentPath, false)} disabled={loadingFiles}>Load more</button></div>
+      {/if}
     {/if}
-  {/if}
+  </div>
 </section>
 
 <style>
-  .detail-header {
-    display: flex; justify-content: space-between; align-items: flex-start;
-    margin-bottom: 2rem; border-bottom: 1px solid #eee; padding-bottom: 1.5rem;
-  }
-  .detail-header h1 { margin: 0 0 0.5rem 0; }
-  .upload-section, .files-section { margin-top: 1.5rem; }
-  .error { color: #b00020; }
-  .hint { color: #666; font-size: 0.9em; margin: 0 0 0.75rem; }
-
-  .status-badge { display: inline-block; margin: 0; padding: 0.25rem 0.75rem; background: #e3f2fd; color: #1565c0; border-radius: 4px; font-weight: 500; font-size: 0.9rem;}
-
-  .start-btn { font-size: 1.05rem; padding: 0.6rem 1.2rem; background-color: #2e7d32; color: white; border: none; border-radius: 4px; cursor: pointer; transition: background-color 0.2s;}
-  .start-btn:hover { background-color: #1b5e20; }
-  .start-btn:disabled { background-color: #a5d6a7; cursor: not-allowed; }
-
-  .upload-row { display: flex; gap: 0.75rem; align-items: center; }
-
-  .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 0.75rem; max-width: 320px; }
-  .progress-fill { height: 100%; background: #2e7d32; transition: width 0.15s ease; }
-
-  .file-list { list-style: none; padding: 0; margin: 1rem 0; border: 1px solid #e0e0e0; border-radius: 6px; }
-  .file-list li { padding: 0.75rem 1rem; border-bottom: 1px solid #e0e0e0; display: flex; align-items: center; gap: 0.5rem; }
-  .file-list li:last-child { border-bottom: none; }
-
-  .link-btn { background: none; border: none; padding: 0; color: #1565c0; font: inherit; cursor: pointer; text-align: left; font-weight: 500; }
-  .link-btn:hover { text-decoration: underline; }
-  .up-btn { margin-bottom: 1rem; padding: 0.4rem 0.8rem; background: #f5f5f5; border: 1px solid #ccc; border-radius: 4px; cursor: pointer;}
-
-  .file-icon { color: #757575; }
-  .size { color: #999; font-size: 0.85em; margin-left: auto; }
-  .empty-state { color: #666; font-style: italic; background: #f9f9f9; padding: 2rem; border-radius: 6px; text-align: center; }
+  .back { display: inline-block; margin-bottom: 1.5rem; font-size: 0.9rem; text-decoration: none; }
+  .back:hover { color: #fff; }
+  .head { display: flex; justify-content: space-between; align-items: flex-start; gap: 1rem; margin-bottom: 1.5rem; }
+  .block { margin-top: 3rem; }
+  .crumbs { display: flex; flex-wrap: wrap; align-items: center; gap: 0.1rem; margin-left: -0.6rem; }
+  .crumbs button { padding: 0.25rem 0.6rem; }
+  .sep { color: var(--fg-2); }
+  .files { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+  .files li { display: flex; align-items: center; border-bottom: 1px solid var(--line); }
+  .files li:last-child { border-bottom: 0; }
+  .folder, .file { flex: 1; display: flex; align-items: center; gap: 0.7rem; padding: 0.75rem 1.25rem; text-align: left; overflow-wrap: anywhere; }
+  .folder { border: 0; border-radius: 0; font-weight: 500; justify-content: flex-start; }
+  .folder:hover:not(:disabled) { background: rgba(255, 255, 255, 0.05); }
+  .ico { width: 0.8rem; color: var(--fg-2); }
+  .size { padding-right: 1.25rem; color: var(--fg-2); font-size: 0.85rem; white-space: nowrap; }
+  .empty { padding: 2.5rem 1rem; text-align: center; }
 </style>

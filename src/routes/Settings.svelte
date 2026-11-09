@@ -1,12 +1,16 @@
 <script lang="ts">
   import { currentUser } from '../lib/stores/auth';
+  import { statusStore } from '../lib/stores/signupStatus';
   import { setSignupMode } from '../lib/api/admin';
   import { changePassword } from '../lib/api/account';
   import { ApiError } from '../lib/http';
+  import { spotlight } from '../lib/ui';
 
   let signupLoading = false;
   let signupError: string | null = null;
   let signupMessage: string | null = null;
+
+  $: signupOpen = $statusStore.mode === 'open';
 
   async function toggleSignup(open: boolean): Promise<void> {
     signupLoading = true;
@@ -14,6 +18,7 @@
     signupMessage = null;
     try {
       await setSignupMode(open);
+      statusStore.update((s) => ({ ...s, mode: open ? 'open' : 'invite_only' }));
       signupMessage = open ? 'Signup opened.' : 'Signup closed.';
     } catch (err) {
       signupError = err instanceof ApiError ? err.message : 'Action failed.';
@@ -60,54 +65,61 @@
   }
 </script>
 
-<h1>Settings</h1>
+<section class="wrap narrow page">
+  <h1 class="title">Settings</h1>
 
-<section>
-  <h2>Profile</h2>
-  <p>Username: {$currentUser?.username ?? '—'}</p>
-</section>
+  <div class="card spot panel" use:spotlight>
+    <h2>Profile</h2>
+    <p class="muted">Username: <span class="val">{$currentUser?.username ?? '—'}</span></p>
+  </div>
 
-<section>
-  <h2>Change password</h2>
-  <form on:submit|preventDefault={handleChangePassword}>
-    <label>
-      Current password
-      <input type="password" bind:value={oldPassword} required autocomplete="current-password" />
-    </label>
-    <label>
-      New password
-      <input type="password" bind:value={newPassword} required autocomplete="new-password" />
-    </label>
-    <label>
-      Confirm new password
-      <input type="password" bind:value={confirmPassword} required autocomplete="new-password" />
-    </label>
-    <label class="checkbox">
-      <input type="checkbox" bind:checked={revokeOtherSessions} />
-      Log out other devices
-    </label>
-    {#if passwordError}<p class="error">{passwordError}</p>{/if}
-    {#if passwordMessage}<p>{passwordMessage}</p>{/if}
-    <button type="submit" disabled={passwordLoading}>
-      {passwordLoading ? 'Updating…' : 'Change password'}
-    </button>
+  <form class="card spot panel stack" use:spotlight on:submit|preventDefault={handleChangePassword}>
+    <h2>Change password</h2>
+    <label>Current password<input type="password" bind:value={oldPassword} required autocomplete="current-password" /></label>
+    <label>New password<input type="password" bind:value={newPassword} required autocomplete="new-password" /></label>
+    <label>Confirm new password<input type="password" bind:value={confirmPassword} required autocomplete="new-password" /></label>
+    <label class="check"><input type="checkbox" bind:checked={revokeOtherSessions} />Log out other devices</label>
+    {#if passwordError}<p class="err">{passwordError}</p>{/if}
+    {#if passwordMessage}<p class="good">{passwordMessage}</p>{/if}
+    <div>
+      <button class="primary" type="submit" disabled={passwordLoading}>{passwordLoading ? 'Updating…' : 'Change password'}</button>
+    </div>
   </form>
-</section>
 
-{#if $currentUser?.roles?.includes('admin')}
-  <section>
-    <h2>Signup</h2>
-    <button disabled={signupLoading} on:click={() => toggleSignup(true)}>Open signup</button>
-    <button disabled={signupLoading} on:click={() => toggleSignup(false)}>Close signup</button>
-    {#if signupMessage}<p>{signupMessage}</p>{/if}
-    {#if signupError}<p class="error">{signupError}</p>{/if}
-  </section>
-{/if}
+  {#if $currentUser?.roles?.includes('admin')}
+    <div class="card spot panel stack" use:spotlight>
+      <div class="split">
+        <div class="stack" style="gap: 0.25rem">
+          <h2>Open signup</h2>
+          <p class="muted">Let new people create their own accounts.</p>
+        </div>
+        <button
+          class="switch"
+          class:on={signupOpen}
+          role="switch"
+          aria-checked={signupOpen}
+          aria-label="Open signup"
+          disabled={signupLoading || $statusStore.mode === null}
+          on:click={() => toggleSignup(!signupOpen)}
+        ><i></i></button>
+      </div>
+      {#if signupMessage}<p class="good">{signupMessage}</p>{/if}
+      {#if signupError}<p class="err">{signupError}</p>{/if}
+    </div>
+  {/if}
+</section>
 
 <style>
-  section { margin-bottom: 1.5rem; }
-  form { display: flex; flex-direction: column; gap: 0.75rem; max-width: 320px; }
-  label { display: flex; flex-direction: column; gap: 0.25rem; }
-  label.checkbox { flex-direction: row; align-items: center; gap: 0.5rem; }
-  .error { color: #b00020; }
+  .page { display: flex; flex-direction: column; gap: 1.25rem; }
+  .page h1 { margin-bottom: 1.25rem; }
+  .panel { padding: 1.5rem; }
+  .panel h2 { margin-bottom: 0.5rem; }
+  .panel.stack h2 { margin-bottom: 0; }
+  .val { color: #fff; }
+  .split { display: flex; justify-content: space-between; align-items: center; gap: 1rem; }
+
+  .switch { position: relative; flex: none; width: 46px; height: 26px; padding: 0; background: transparent; }
+  .switch i { position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #777; transition: left 0.2s, background 0.2s; }
+  .switch.on { background: #fff; border-color: #fff; }
+  .switch.on i { left: 23px; background: #000; }
 </style>

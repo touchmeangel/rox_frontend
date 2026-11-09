@@ -4,6 +4,8 @@
   import type { RunSummary } from '../lib/types';
   import { ApiError } from '../lib/http';
   import { navigate } from '../lib/router';
+  import DropZone from '../lib/DropZone.svelte';
+  import { spotlight, autofocus, statusTone } from '../lib/ui';
 
   let runs: RunSummary[] = [];
   let nextCursor: string | undefined;
@@ -32,10 +34,6 @@
     }
   }
 
-  function handleFileSelect(e: Event): void {
-    selectedFile = (e.target as HTMLInputElement).files?.[0] ?? null;
-  }
-
   function goToRun(id: string, name: string): void {
     sessionStorage.setItem(`run_name_${id}`, name);
     navigate(`/runs/${id}`);
@@ -46,6 +44,7 @@
     newRunName = '';
     selectedFile = null;
     uploadProgress = 0;
+    modalError = null;
   }
 
   async function handleCreate(): Promise<void> {
@@ -93,44 +92,77 @@
     }
   }
 
+  function onKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && showCreateModal && !creating) {
+      resetModal();
+      return;
+    }
+    if (e.key === 'n' && !showCreateModal && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      if ((e.target as HTMLElement | null)?.closest?.('input,textarea,select')) return;
+      e.preventDefault();
+      showCreateModal = true;
+    }
+  }
+
   onMount(() => load(true));
 </script>
 
-<div class="header-actions">
-  <h1>Runs</h1>
-  <button on:click={() => showCreateModal = true}>+ Create New Run</button>
-</div>
+<svelte:window on:keydown={onKey} />
 
-{#if listActionError}<p class="error">{listActionError}</p>{/if}
+<section class="wrap page">
+  <div class="head">
+    <div class="stack" style="gap: 0.5rem">
+      <h1>Runs</h1>
+      {#if runs.length > 0}<p class="muted">{runs.length}{nextCursor ? '+' : ''} {runs.length === 1 ? 'run' : 'runs'}</p>{/if}
+    </div>
+    <button class="primary" on:click={() => (showCreateModal = true)}>New run <kbd>N</kbd></button>
+  </div>
+
+  {#if listActionError}<p class="err">{listActionError}</p>{/if}
+
+  {#if loading && runs.length === 0}
+    <p class="muted">Loading…</p>
+  {:else if loadError}
+    <p class="err">{loadError}</p>
+  {:else if runs.length === 0}
+    <div class="card spot empty" use:spotlight>
+      <p class="muted">No runs yet. Create one and drop in a workspace to get started.</p>
+      <button class="primary" on:click={() => (showCreateModal = true)}>Create your first run</button>
+    </div>
+  {:else}
+    <ul class="card rows">
+      {#each runs as run (run.id)}
+        <li class="row spot" use:spotlight>
+          <i class="dot {statusTone(run.status)}" title={run.status}></i>
+          <a class="name" href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run.id, run.name)}>{run.name}</a>
+          <span class="meta">{run.status}</span>
+          <time class="meta">{new Date(run.created_at).toLocaleString()}</time>
+          <button class="ghost danger" on:click={() => handleDelete(run.id)}>Delete</button>
+        </li>
+      {/each}
+    </ul>
+    {#if nextCursor}
+      <button class="more" on:click={() => load(false)} disabled={loading}>{loading ? 'Loading…' : 'Load more'}</button>
+    {/if}
+  {/if}
+</section>
 
 {#if showCreateModal}
-  <div class="modal-overlay">
-    <div class="modal">
-      <h2>Create Run</h2>
-      <form on:submit|preventDefault={handleCreate}>
-        <div class="form-group">
-          <label for="runName">Run Name</label>
-          <input id="runName" placeholder="My new run" bind:value={newRunName} required disabled={creating} />
-        </div>
-        <div class="form-group">
-          <label for="workspaceFile">Workspace (.zip) — optional</label>
-          <input id="workspaceFile" type="file" accept=".zip" on:change={handleFileSelect} disabled={creating} />
+  <div class="overlay" role="presentation" on:click|self={() => !creating && resetModal()}>
+    <div class="modal card" role="dialog" aria-modal="true" aria-label="Create run">
+      <h2>New run</h2>
+      <form class="stack" style="gap: 1.1rem" on:submit|preventDefault={handleCreate}>
+        <label>Run name<input id="runName" type="text" use:autofocus placeholder="My new run" bind:value={newRunName} required disabled={creating} /></label>
+        <div class="stack" style="gap: 0.5rem">
+          <span class="lbl">Workspace (.zip), optional</span>
+          <DropZone bind:file={selectedFile} disabled={creating} progress={creating && selectedFile ? uploadProgress : null} />
           <p class="hint">You can also upload and start this run later from its page.</p>
         </div>
-
-        {#if creating && selectedFile}
-          <div class="progress-bar" role="progressbar" aria-valuenow={Math.round(uploadProgress * 100)} aria-valuemin="0" aria-valuemax="100">
-            <div class="progress-fill" style="width: {Math.round(uploadProgress * 100)}%"></div>
-          </div>
-          <p class="progress-label">{Math.round(uploadProgress * 100)}%</p>
-        {/if}
-
-        {#if modalError}<p class="error">{modalError}</p>{/if}
-
-        <div class="modal-actions">
-          <button type="button" class="cancel-btn" on:click={resetModal} disabled={creating}>Cancel</button>
-          <button type="submit" disabled={creating || !newRunName.trim()}>
-            {creating ? (selectedFile ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Saving…') : selectedFile ? 'Create, Upload & Start' : 'Create'}
+        {#if modalError}<p class="err">{modalError}</p>{/if}
+        <div class="actions">
+          <button type="button" class="ghost" on:click={resetModal} disabled={creating}>Cancel</button>
+          <button type="submit" class="primary" disabled={creating || !newRunName.trim()}>
+            {creating ? (selectedFile ? `Uploading… ${Math.round(uploadProgress * 100)}%` : 'Saving…') : selectedFile ? 'Create, upload & start' : 'Create run'}
           </button>
         </div>
       </form>
@@ -138,67 +170,30 @@
   </div>
 {/if}
 
-{#if loading && runs.length === 0}
-  <p>Loading…</p>
-{:else if loadError}
-  <p class="error">{loadError}</p>
-{:else if runs.length === 0}
-  <p>No runs yet.</p>
-{:else}
-  <table>
-    <thead>
-      <tr><th>Name</th><th>Status</th><th>Created</th><th></th></tr>
-    </thead>
-    <tbody>
-      {#each runs as run (run.id)}
-        <tr>
-          <td>
-            <a href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run.id, run.name)}>
-              {run.name}
-            </a>
-          </td>
-          <td>{run.status}</td>
-          <td>{new Date(run.created_at).toLocaleString()}</td>
-          <td><button class="delete-btn" on:click={() => handleDelete(run.id)}>Delete</button></td>
-        </tr>
-      {/each}
-    </tbody>
-  </table>
-  {#if nextCursor}
-    <button on:click={() => load(false)} disabled={loading}>{loading ? 'Loading…' : 'Load more'}</button>
-  {/if}
-{/if}
-
 <style>
-  .header-actions { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 0.6rem 0.4rem; border-bottom: 1px solid #ddd; }
-
-  .error { color: #b00020; margin: 0.5rem 0; }
-  .hint { color: #666; font-size: 0.85em; margin: 0.25rem 0 0; }
-  .delete-btn { color: #b00020; background: none; border: 1px solid #b00020; padding: 0.25rem 0.5rem; cursor: pointer; border-radius: 4px; }
-  .delete-btn:hover { background: #ffebee; }
-
-  .modal-overlay {
-    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
-    display: flex; align-items: center; justify-content: center;
-    z-index: 1000;
+  .head { display: flex; justify-content: space-between; align-items: flex-end; gap: 1rem; margin-bottom: 2.5rem; }
+  .rows { list-style: none; margin: 0; padding: 0; overflow: hidden; }
+  .row {
+    display: grid; grid-template-columns: auto 1fr auto auto auto; align-items: center; gap: 1rem;
+    padding: 1rem 1.25rem; border-bottom: 1px solid var(--line); transition: background 0.15s;
   }
-  .modal {
-    background: white; padding: 2rem; border-radius: 8px;
-    width: 100%; max-width: 420px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-  }
-  .modal h2 { margin-top: 0; margin-bottom: 1.5rem; }
-  .form-group { margin-bottom: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
-  .form-group label { font-weight: bold; font-size: 0.9rem; }
-  .form-group input[type="text"] { padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; }
-  .modal-actions { margin-top: 2rem; display: flex; justify-content: flex-end; gap: 0.75rem; }
-  .cancel-btn { background: #f5f5f5; color: #333; border: 1px solid #ccc; }
-  .cancel-btn:hover { background: #e0e0e0; }
+  .row:last-child { border-bottom: 0; }
+  .row:hover { background: rgba(255, 255, 255, 0.03); }
+  .name { font-size: 1.05rem; font-weight: 500; text-decoration: none; }
+  .name::after { content: ''; position: absolute; inset: 0; }
+  .meta { color: var(--fg-2); font-size: 0.85rem; }
+  .row button { position: relative; z-index: 1; }
+  .empty { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; padding: 4rem 1rem; text-align: center; }
+  .more { margin-top: 1.5rem; }
 
-  .progress-bar { height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin-top: 0.5rem; }
-  .progress-fill { height: 100%; background: #1565c0; transition: width 0.15s ease; }
-  .progress-label { font-size: 0.8rem; color: #666; margin: 0.25rem 0 0; text-align: right; }
+  .overlay { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 1rem; background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(6px); }
+  .modal { width: 100%; max-width: 440px; padding: 1.75rem; background: #0a0a0a; display: flex; flex-direction: column; gap: 1.25rem; animation: rise 0.25s ease both; }
+  .lbl { font-size: 0.85rem; color: var(--fg-1); }
+  .hint { color: var(--fg-2); font-size: 0.8rem; }
+  .actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
+
+  @media (max-width: 640px) {
+    .row { grid-template-columns: auto 1fr auto; }
+    .row .meta { display: none; }
+  }
 </style>
