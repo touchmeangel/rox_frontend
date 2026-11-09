@@ -43,12 +43,7 @@
 <header class="top">
   <div class="wrap bar">
     <a class="brand" href="/" on:click|preventDefault={() => navigate($isAuthenticated ? '/runs' : '/login')}>
-      <svg width="20" height="20" viewBox="0 0 12 12" fill="#fff" aria-hidden="true">
-        <rect x="0" y="0" width="4" height="4" /><rect x="8" y="0" width="4" height="4" />
-        <rect x="4" y="4" width="4" height="4" />
-        <rect x="0" y="8" width="4" height="4" /><rect x="8" y="8" width="4" height="4" />
-      </svg>
-      rox
+      RoX
     </a>
     <nav>
       {#if $isAuthenticated}
