@@ -81,18 +81,28 @@
     }
   }
 
+  let confirmingId: string | null = null;
+  let deletingId: string | null = null;
+
   async function handleDelete(runId: string): Promise<void> {
-    if (!confirm('Delete this run? This cannot be undone.')) return;
+    deletingId = runId;
     listActionError = null;
     try {
       await deleteRun(runId);
       runs = runs.filter((r) => r.id !== runId);
     } catch (err) {
       listActionError = err instanceof ApiError ? err.message : 'Failed to delete run.';
+    } finally {
+      deletingId = null;
+      confirmingId = null;
     }
   }
 
   function onKey(e: KeyboardEvent): void {
+    if (e.key === 'Escape' && confirmingId && !deletingId) {
+      confirmingId = null;
+      return;
+    }
     if (e.key === 'Escape' && showCreateModal && !creating) {
       resetModal();
       return;
@@ -132,12 +142,22 @@
   {:else}
     <ul class="card rows">
       {#each runs as run (run.id)}
-        <li class="row spot" use:spotlight>
+        <li class="row spot" class:confirming={confirmingId === run.id} use:spotlight>
           <i class="dot {statusTone(run.status)}" title={run.status}></i>
           <a class="name" href={`/runs/${run.id}`} on:click|preventDefault={() => goToRun(run.id, run.name)}>{run.name}</a>
           <span class="meta">{run.status}</span>
           <time class="meta">{new Date(run.created_at).toLocaleString()}</time>
-          <button class="ghost danger" on:click={() => handleDelete(run.id)}>Delete</button>
+          {#if confirmingId === run.id}
+            <span class="confirm">
+              <span class="q">Delete this run? This can't be undone.</span>
+              <button class="ghost" use:autofocus on:click={() => (confirmingId = null)} disabled={deletingId === run.id}>Cancel</button>
+              <button class="danger-fill" on:click={() => handleDelete(run.id)} disabled={deletingId === run.id}>
+                {deletingId === run.id ? 'Deleting…' : 'Delete'}
+              </button>
+            </span>
+          {:else}
+            <button class="ghost danger" on:click={() => (confirmingId = run.id)}>Delete</button>
+          {/if}
         </li>
       {/each}
     </ul>
@@ -183,6 +203,13 @@
   .name::after { content: ''; position: absolute; inset: 0; }
   .meta { color: var(--fg-2); font-size: 0.85rem; }
   .row button { position: relative; z-index: 1; }
+  .row.confirming { background: rgba(248, 113, 113, 0.07); box-shadow: inset 2px 0 0 var(--bad); }
+  .row.confirming .meta { display: none; }
+  .row.confirming .name::after { display: none; }
+  .confirm { grid-column: 3 / -1; justify-self: end; display: flex; align-items: center; gap: 0.5rem; animation: rise 0.2s ease both; }
+  .q { color: var(--fg-1); font-size: 0.9rem; margin-right: 0.5rem; }
+  .danger-fill { background: var(--bad); border-color: var(--bad); color: #000; }
+  .danger-fill:hover:not(:disabled) { background: #fca5a5; border-color: #fca5a5; }
   .empty { display: flex; flex-direction: column; align-items: center; gap: 1.25rem; padding: 4rem 1rem; text-align: center; }
   .more { margin-top: 1.5rem; }
 
@@ -195,5 +222,6 @@
   @media (max-width: 640px) {
     .row { grid-template-columns: auto 1fr auto; }
     .row .meta { display: none; }
+    .q { display: none; }
   }
 </style>
